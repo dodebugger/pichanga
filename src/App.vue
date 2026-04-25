@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="page">
     <header class="hero">
-      <h1>Proyecto Pichanga</h1>
+      <h1>Pichanga</h1>
       <p>Registro de jugadores y pagos</p>
     </header>
 
@@ -14,34 +14,71 @@
             <input
               v-model.trim="form.name"
               type="text"
-              placeholder="Ej. Juan Pérez"
+              list="players-list"
+              placeholder="Selecciona o escribe un jugador"
               maxlength="60"
             />
+            <datalist id="players-list">
+              <option v-for="player in playerOptions" :key="player" :value="player"></option>
+            </datalist>
+            <small class="hint">Puedes elegir uno de la lista o escribir uno nuevo.</small>
           </label>
 
-          <label class="field">
+          <div class="field">
             <span>Monto</span>
+            <div class="payment-toggle amount-toggle" role="group" aria-label="Monto de pago">
+              <button
+                type="button"
+                class="btn payment-btn"
+                :class="{ 'is-active': form.amount === 7 }"
+                @click="form.amount = 7"
+              >
+                S/ 7
+              </button>
+              <button
+                type="button"
+                class="btn payment-btn"
+                :class="{ 'is-active': form.amount === 5 }"
+                @click="form.amount = 5"
+              >
+                S/ 5
+              </button>
+            </div>
             <input
-              v-model.number="form.amount"
+              v-model.number="form.customAmount"
               type="number"
               min="0"
               step="0.01"
-              placeholder="Ej. 25"
+              placeholder="Otro monto (opcional)"
             />
-          </label>
+            <small class="hint">Si escribes otro monto, reemplaza al de S/ 7 o S/ 5.</small>
+          </div>
 
-          <label class="field">
+          <div class="field">
             <span>Modalidad de pago</span>
-            <select v-model="form.method">
-              <option value="">Seleccionar</option>
-              <option value="YAPE">YAPE</option>
-              <option value="EFECTIVO">EFECTIVO</option>
-            </select>
-          </label>
+            <div class="payment-toggle" role="group" aria-label="Modalidad de pago">
+              <button
+                type="button"
+                class="btn payment-btn"
+                :class="{ 'is-active': form.method === 'YAPE' }"
+                @click="form.method = 'YAPE'"
+              >
+                YAPE
+              </button>
+              <button
+                type="button"
+                class="btn payment-btn"
+                :class="{ 'is-active': form.method === 'EFECTIVO' }"
+                @click="form.method = 'EFECTIVO'"
+              >
+                EFECTIVO
+              </button>
+            </div>
+          </div>
 
           <div class="actions-row">
-            <button class="btn btn-primary" type="submit">Guardar</button>
-            <button class="btn" type="button" @click="resetForm">Limpiar formulario</button>
+            <button class="btn btn-primary btn-wide" type="submit">Guardar</button>
+            <button class="btn btn-wide" type="button" @click="resetForm">Limpiar formulario</button>
           </div>
 
           <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
@@ -56,8 +93,8 @@
           </button>
         </div>
 
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap desktop-table">
+          <table class="records-table">
             <thead>
               <tr>
                 <th>N°</th>
@@ -91,6 +128,26 @@
             </tbody>
           </table>
         </div>
+
+        <div class="mobile-cards">
+          <article v-for="(record, index) in records" :key="`mobile-${record.id}`" class="record-card">
+            <header>
+              <strong>#{{ index + 1 }} {{ record.name }}</strong>
+            </header>
+            <p><span>Monto:</span> S/ {{ formatAmount(record.amount) }}</p>
+            <p>
+              <span>Modalidad:</span>
+              <span class="badge" :class="record.method === 'YAPE' ? 'badge-yape' : 'badge-cash'">
+                {{ record.method }}
+              </span>
+            </p>
+            <p><span>Fecha:</span> {{ formatDate(record.createdAt) }}</p>
+            <button class="btn btn-danger btn-wide" type="button" @click="removeRecord(record.id)">
+              Eliminar
+            </button>
+          </article>
+          <p v-if="!records.length" class="empty">No hay registros aún.</p>
+        </div>
       </section>
 
       <section class="card" ref="reportSection">
@@ -106,48 +163,57 @@
           </div>
         </div>
 
-        <div class="summary-grid">
-          <article>
-            <h3>Total general</h3>
-            <p>S/ {{ formatAmount(totalGeneral) }}</p>
-          </article>
-          <article>
-            <h3>Total YAPE</h3>
-            <p>S/ {{ formatAmount(totalYape) }}</p>
-          </article>
-          <article>
-            <h3>Total EFECTIVO</h3>
-            <p>S/ {{ formatAmount(totalCash) }}</p>
-          </article>
-          <article>
-            <h3>Cantidad jugadores</h3>
-            <p>{{ records.length }}</p>
-          </article>
-        </div>
+        <div class="report-stepper">
+          <p class="step-indicator">Paso {{ reportStep + 1 }} de 2</p>
+          <h3 class="report-title">{{ reportStepTitle }}</h3>
 
-        <h3 class="report-title">Lista de jugadores registrados</h3>
-        <div class="table-wrap report-table">
-          <table>
-            <thead>
-              <tr>
-                <th>N°</th>
-                <th>Jugador</th>
-                <th>Monto</th>
-                <th>Modalidad</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(record, index) in records" :key="`report-${record.id}`">
-                <td>{{ index + 1 }}</td>
-                <td>{{ record.name }}</td>
-                <td>S/ {{ formatAmount(record.amount) }}</td>
-                <td>{{ record.method }}</td>
-              </tr>
-              <tr v-if="!records.length">
-                <td colspan="4" class="empty">Sin datos para mostrar.</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="reportStep === 0" class="summary-grid compact">
+            <article>
+              <h3>Total general</h3>
+              <p>S/ {{ formatAmount(totalGeneral) }}</p>
+            </article>
+            <article>
+              <h3>Total YAPE</h3>
+              <p>S/ {{ formatAmount(totalYape) }}</p>
+            </article>
+            <article>
+              <h3>Total EFECTIVO</h3>
+              <p>S/ {{ formatAmount(totalCash) }}</p>
+            </article>
+            <article>
+              <h3>Cantidad jugadores</h3>
+              <p>{{ records.length }}</p>
+            </article>
+          </div>
+
+          <div v-else class="table-wrap report-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>N°</th>
+                  <th>Jugador</th>
+                  <th>Monto</th>
+                  <th>Modalidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(record, index) in records" :key="`report-${record.id}`">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ record.name }}</td>
+                  <td>S/ {{ formatAmount(record.amount) }}</td>
+                  <td>{{ record.method }}</td>
+                </tr>
+                <tr v-if="!records.length">
+                  <td colspan="4" class="empty">Sin datos para mostrar.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="actions-row">
+            <button class="btn btn-wide" type="button" @click="previousReportStep">Anterior</button>
+            <button class="btn btn-primary btn-wide" type="button" @click="nextReportStep">Siguiente</button>
+          </div>
         </div>
       </section>
     </main>
@@ -158,16 +224,47 @@
 import { computed, onMounted, ref } from "vue";
 
 const STORAGE_KEY = "pichanga-records";
+const INITIAL_PLAYERS = [
+  "Marcial",
+  "Jairo",
+  "Nicky",
+  "Beto",
+  "Isaac",
+  "Cristian",
+  "Henry Taba",
+  "Jose",
+  "Paul",
+  "Arturo",
+  "Catalino",
+  "Junior Nicki",
+  "Trinidad",
+  "Nilson Taba",
+  "Jack Nici",
+  "Alex",
+  "Rommel",
+  "Romario",
+  "Martin"
+];
 
 const form = ref({
   name: "",
   amount: null,
+  customAmount: null,
   method: ""
 });
 
 const records = ref([]);
 const errorMessage = ref("");
-const reportSection = ref(null);
+const reportStep = ref(0);
+
+const playerOptions = computed(() => {
+  const fromRecords = records.value.map((record) => record.name).filter(Boolean);
+  return [...new Set([...INITIAL_PLAYERS, ...fromRecords])].sort((a, b) => a.localeCompare(b, "es"));
+});
+
+const reportStepTitle = computed(() =>
+  reportStep.value === 0 ? "Resumen de totales" : "Lista de jugadores registrados"
+);
 
 const totalGeneral = computed(() =>
   records.value.reduce((sum, record) => sum + Number(record.amount), 0)
@@ -206,12 +303,14 @@ function persistRecords() {
 }
 
 function validateForm() {
+  const selectedAmount = getSelectedAmount();
+
   if (!form.value.name) {
     errorMessage.value = "El nombre del jugador es obligatorio.";
     return false;
   }
 
-  if (!form.value.amount || Number(form.value.amount) <= 0) {
+  if (!selectedAmount || Number(selectedAmount) <= 0) {
     errorMessage.value = "El monto debe ser mayor a 0.";
     return false;
   }
@@ -227,11 +326,12 @@ function validateForm() {
 
 function saveRecord() {
   if (!validateForm()) return;
+  const selectedAmount = getSelectedAmount();
 
   const newRecord = {
     id: crypto.randomUUID(),
     name: form.value.name,
-    amount: Number(form.value.amount),
+    amount: Number(selectedAmount),
     method: form.value.method,
     createdAt: new Date().toISOString()
   };
@@ -245,9 +345,17 @@ function resetForm() {
   form.value = {
     name: "",
     amount: null,
+    customAmount: null,
     method: ""
   };
   errorMessage.value = "";
+}
+
+function getSelectedAmount() {
+  if (form.value.customAmount && Number(form.value.customAmount) > 0) {
+    return Number(form.value.customAmount);
+  }
+  return Number(form.value.amount);
 }
 
 function removeRecord(recordId) {
@@ -360,6 +468,14 @@ function printReport() {
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
+}
+
+function nextReportStep() {
+  reportStep.value = (reportStep.value + 1) % 2;
+}
+
+function previousReportStep() {
+  reportStep.value = reportStep.value === 0 ? 1 : reportStep.value - 1;
 }
 
 onMounted(() => {

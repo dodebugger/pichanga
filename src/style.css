@@ -84,12 +84,17 @@ body {
   color: #374151;
 }
 
+.hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 input,
 select {
   width: 100%;
   border: 1px solid #c8bca7;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 11px 12px;
   font: inherit;
   background: var(--surface-strong);
 }
@@ -100,21 +105,44 @@ select:focus {
   border-color: var(--primary);
 }
 
+.payment-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.payment-btn {
+  min-height: 48px;
+  border-width: 2px;
+  background: #ffffff;
+}
+
+.payment-btn.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
 .actions-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .btn {
   border: 1px solid #b7ac9a;
   border-radius: 10px;
-  padding: 9px 13px;
+  padding: 11px 13px;
   background: #fff;
   color: var(--text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.btn-wide {
+  flex: 1 1 180px;
+  min-height: 48px;
 }
 
 .btn:hover {
@@ -149,6 +177,7 @@ select:focus {
 .btn-small {
   padding: 6px 10px;
   font-size: 0.85rem;
+  min-height: auto;
 }
 
 .error {
@@ -216,6 +245,10 @@ th {
   gap: 12px;
 }
 
+.summary-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .summary-grid article {
   border: 1px solid #e6dccb;
   border-radius: 12px;
@@ -235,8 +268,42 @@ th {
   font-weight: 700;
 }
 
+.report-stepper {
+  display: grid;
+  gap: 12px;
+}
+
+.step-indicator {
+  margin: 0;
+  font-weight: 700;
+  color: #334155;
+}
+
 .report-title {
-  margin-top: 18px;
+  margin: 0;
+}
+
+.mobile-cards {
+  display: none;
+  gap: 10px;
+}
+
+.record-card {
+  border: 1px solid #e6dccb;
+  border-radius: 12px;
+  background: #fffaf0;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.record-card p {
+  margin: 0;
+  color: #374151;
+}
+
+.record-card p span:first-child {
+  font-weight: 700;
 }
 
 @media (max-width: 900px) {
@@ -247,18 +314,49 @@ th {
 
 @media (max-width: 640px) {
   .page {
-    padding: 14px;
+    padding: 12px;
   }
 
   .card {
     padding: 14px;
   }
 
-  .summary-grid {
+  .actions-row {
+    flex-direction: column;
+  }
+
+  .btn-wide,
+  .actions-row .btn {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .payment-toggle {
     grid-template-columns: 1fr;
   }
 
-  table {
-    min-width: 620px;
+  .desktop-table {
+    display: none;
+  }
+
+  .mobile-cards {
+    display: grid;
+  }
+
+  .summary-grid,
+  .summary-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .report-actions {
+    width: 100%;
+  }
+
+  .report-actions .btn {
+    width: 100%;
+  }
+
+  .report-table table {
+    min-width: 540px;
   }
 }
