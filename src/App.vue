@@ -448,15 +448,18 @@ function getReportHtmlDocument() {
     th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
     th { background: #f3f4f6; }
     .totals { margin-top: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .final { background: #dcfce7; border: 1px solid #16a34a; padding: 10px; border-radius: 8px; font-size: 18px; }
+    .today { background: #eff6ff; border: 1px solid #93c5fd; padding: 10px; border-radius: 8px; }
   </style>
 </head>
 <body>
   <h1>Pichanga - Reporte de Pagos</h1>
+  <p class="today"><strong>Fecha del día:</strong> ${new Date().toLocaleDateString("es-PE")}</p>
   <p>Generado: ${new Date().toLocaleString("es-PE")}</p>
   <div class="totals">
     <div><strong>Total aportes:</strong> S/ ${formatAmount(totalGeneral.value)}</div>
     <div><strong>Costo cancha:</strong> S/ ${formatAmount(courtTotal.value)}</div>
-    <div><strong>Saldo final:</strong> S/ ${formatAmount(netTotal.value)}</div>
+    <div class="final"><strong>Saldo final:</strong> S/ ${formatAmount(netTotal.value)}</div>
     <div><strong>Total YAPE:</strong> S/ ${formatAmount(totalYape.value)}</div>
     <div><strong>Total EFECTIVO:</strong> S/ ${formatAmount(totalCash.value)}</div>
     <div><strong>Total jugadores:</strong> ${records.value.length}</div>
@@ -515,10 +518,11 @@ async function createReportImageBlob() {
   const now = new Date().toLocaleString("es-PE");
   const textLines = [
     "PICHANGA - REPORTE",
+    `FECHA DEL DIA: ${new Date().toLocaleDateString("es-PE")}`,
     `Generado: ${now}`,
     `Total aportes: S/ ${formatAmount(totalGeneral.value)}`,
     `Costo cancha: S/ ${formatAmount(courtTotal.value)} (${formatAmount(court.value.hourRate)} x ${court.value.hours}h)`,
-    `Saldo final: S/ ${formatAmount(netTotal.value)}`,
+    `*** SALDO FINAL: S/ ${formatAmount(netTotal.value)} ***`,
     `YAPE: S/ ${formatAmount(totalYape.value)} | EFECTIVO: S/ ${formatAmount(totalCash.value)}`,
     `Jugadores: ${records.value.length}`
   ];
@@ -530,7 +534,17 @@ async function createReportImageBlob() {
   const allLines = [...textLines, "", "Detalle:", ...rows];
 
   const svgText = allLines
-    .map((line, index) => `<text x="50" y="${70 + index * 42}" font-size="30" fill="#1f2937">${escapeXml(line)}</text>`)
+    .map((line, index) => {
+      const isFinal = line.includes("SALDO FINAL");
+      const y = 70 + index * 42;
+      if (isFinal) {
+        return `
+          <rect x="40" y="${y - 30}" width="1000" height="46" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+          <text x="50" y="${y}" font-size="32" font-weight="700" fill="#166534">${escapeXml(line)}</text>
+        `;
+      }
+      return `<text x="50" y="${y}" font-size="30" fill="#1f2937">${escapeXml(line)}</text>`;
+    })
     .join("");
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
