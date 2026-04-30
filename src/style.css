@@ -15,6 +15,9 @@
   --cash: #854d0e;
   --whatsapp: #128c7e;
   --whatsapp-hover: #0f766b;
+  --choice: #b45309;
+  --choice-hover: #92400e;
+  --choice-soft: #fff7ed;
   --shadow: 0 14px 30px rgba(84, 63, 31, 0.12);
 }
 
@@ -74,13 +77,30 @@ select:focus {
 .payment-btn {
   min-height: 48px;
   border-width: 2px;
+  border-color: #d6c9b5;
   background: #ffffff;
+  color: #7c2d12;
+}
+
+.payment-btn:hover {
+  background: var(--choice-soft);
+  border-color: #c2410c;
 }
 
 .payment-btn.is-active {
-  background: var(--primary);
+  background: var(--choice);
   color: #fff;
-  border-color: var(--primary);
+  border-color: var(--choice);
+}
+
+.payment-btn.is-active:hover {
+  background: var(--choice-hover);
+  border-color: var(--choice-hover);
+}
+
+.payment-btn:focus-visible {
+  outline: 3px solid rgba(180, 83, 9, 0.25);
+  outline-offset: 2px;
 }
 
 .actions-row {
