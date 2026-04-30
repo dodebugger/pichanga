@@ -177,7 +177,7 @@
         <div class="card-top">
           <h2>Reporte</h2>
           <div class="actions-row report-actions">
-            <button class="btn" type="button" @click="exportReportHtml" :disabled="!records.length">Exportar HTML</button>
+            <button class="btn" type="button" @click="exportReportHtml" :disabled="!records.length">Exportar reporte</button>
             <button class="btn" type="button" @click="downloadReportImage" :disabled="!records.length">Guardar imagen</button>
             <button class="btn btn-whatsapp" type="button" @click="shareReportWhatsApp" :disabled="!records.length">
               <span class="wa-icon" aria-hidden="true">
@@ -195,7 +195,7 @@
           <p class="step-indicator">Paso {{ reportStep + 1 }} de 2</p>
           <h3 class="report-title">{{ reportStepTitle }}</h3>
 
-          <div v-if="reportStep === 0" class="summary-grid compact" id="report-capture" ref="reportCapture">
+          <div v-if="reportStep === 0" class="summary-grid compact" id="report-capture">
             <article>
               <h3>Total aportes</h3>
               <p>S/ {{ formatAmount(totalGeneral) }}</p>
@@ -274,7 +274,6 @@ const errorMessage = ref("");
 const courtMessage = ref("");
 const reportStep = ref(0);
 const reportSection = ref(null);
-const reportCapture = ref(null);
 
 const playerOptions = computed(() => {
   const fromRecords = records.value.map((record) => record.name).filter(Boolean);
@@ -510,10 +509,7 @@ function previousReportStep() {
   reportStep.value = reportStep.value === 0 ? 1 : reportStep.value - 1;
 }
 
-function createReportImageBlob() {
-  const reportNode = reportCapture.value;
-  if (!reportNode) return null;
-
+async function createReportImageBlob() {
   const width = 1080;
   const height = 1350;
   const now = new Date().toLocaleString("es-PE");
@@ -537,35 +533,58 @@ function createReportImageBlob() {
     .map((line, index) => `<text x="50" y="${70 + index * 42}" font-size="30" fill="#1f2937">${escapeXml(line)}</text>`)
     .join("");
 
-  const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
   <rect width="100%" height="100%" fill="#fffdf8"/>
   <rect x="20" y="20" width="${width - 40}" height="${height - 40}" rx="20" fill="#fffaf0" stroke="#ddd4c5"/>
   ${svgText}
 </svg>`;
 
-  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  return blob;
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const img = new Image();
+    const loaded = new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+    img.src = svgUrl;
+    await loaded;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const pngBlob = await new Promise((resolve) =>
+      canvas.toBlob((blob) => resolve(blob), "image/png", 1)
+    );
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
 }
 
 async function downloadReportImage() {
-  const blob = createReportImageBlob();
+  const blob = await createReportImageBlob();
   if (!blob) return;
 
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `reporte-pichanga-${new Date().toISOString().slice(0, 10)}.svg`;
+  link.download = `reporte-pichanga-${new Date().toISOString().slice(0, 10)}.png`;
   link.click();
   URL.revokeObjectURL(url);
 }
 
 async function shareReportWhatsApp() {
-  const blob = createReportImageBlob();
+  const blob = await createReportImageBlob();
   if (!blob) return;
 
-  const file = new File([blob], `reporte-pichanga-${new Date().toISOString().slice(0, 10)}.svg`, {
-    type: "image/svg+xml"
+  const file = new File([blob], `reporte-pichanga-${new Date().toISOString().slice(0, 10)}.png`, {
+    type: "image/png"
   });
 
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -577,11 +596,16 @@ async function shareReportWhatsApp() {
     return;
   }
 
-  await downloadReportImage();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  link.click();
+  URL.revokeObjectURL(url);
   const text = encodeURIComponent(
-    `Reporte Pichanga%0A` +
-    `Total aportes: S/ ${formatAmount(totalGeneral.value)}%0A` +
-    `Costo cancha: S/ ${formatAmount(courtTotal.value)}%0A` +
+    `Reporte Pichanga\n` +
+    `Total aportes: S/ ${formatAmount(totalGeneral.value)}\n` +
+    `Costo cancha: S/ ${formatAmount(courtTotal.value)}\n` +
     `Saldo final: S/ ${formatAmount(netTotal.value)}`
   );
   window.open(`https://wa.me/?text=${text}`, "_blank");
