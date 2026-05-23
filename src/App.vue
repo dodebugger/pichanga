@@ -1,5 +1,6 @@
 ﻿<template>
-  <div class="page">
+  <ResumenPage v-if="isResumenRoute" />
+  <div v-else class="page">
     <header class="hero">
       <h1>Pichanga</h1>
       <p>Registro de jugadores y pagos</p>
@@ -258,6 +259,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import ResumenPage from "./pages/ResumenPage.vue";
 
 const STORAGE_KEY = "pichanga-records";
 const STORAGE_COURT_KEY = "pichanga-court";
@@ -274,6 +276,11 @@ const errorMessage = ref("");
 const courtMessage = ref("");
 const reportStep = ref(0);
 const reportSection = ref(null);
+const basePath = import.meta.env.BASE_URL;
+const isResumenRoute = computed(() => {
+  const path = window.location.pathname.replace(/\/$/, "");
+  return path === "/resumen" || path === `${basePath}resumen`.replace(/\/$/, "");
+});
 
 const playerOptions = computed(() => {
   const fromRecords = records.value.map((record) => record.name).filter(Boolean);
