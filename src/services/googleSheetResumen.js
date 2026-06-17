@@ -2,13 +2,12 @@ import { strFromU8, unzipSync } from "fflate";
 
 const SPREADSHEET_ID = "1asqY2ooiesj3BbC5xlFNY-xPTOSf8JwE";
 const SHEET_NAME = "Resumen";
-const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=xlsx`;
-
+const XLSX_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=xlsx`;
 const REQUIRED_COLUMNS = ["N°", "FECHA", "SALDO", "FOTO", "ESTADO"];
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export async function fetchResumenRows() {
-  const response = await fetch(`${SHEET_URL}&cacheBust=${Date.now()}`);
+  const response = await fetch(`${XLSX_URL}&cacheBust=${Date.now()}`);
 
   if (!response.ok) {
     throw new Error("No se pudo leer el Google Sheet público.");
@@ -20,27 +19,116 @@ export async function fetchResumenRows() {
   const sheetPath = getSheetPath(workbook, workbookRels);
   const worksheet = parseXml(readZipText(files, sheetPath));
   const sharedStrings = readSharedStrings(files);
+  const styleFormats = readStyleFormats(files);
   const hyperlinks = readHyperlinks(files, sheetPath, worksheet);
 
-  return getRows(worksheet, sharedStrings, hyperlinks);
+  return getRows(worksheet, sharedStrings, styleFormats, hyperlinks);
 }
 
-function getSheetPath(workbook, workbookRels) {
-  const sheets = [...workbook.getElementsByTagName("sheet")];
-  const sheet = sheets.find((item) => item.getAttribute("name") === SHEET_NAME);
+function getRows(worksheet, sharedStrings, styleFormats, hyperlinks) {
+  const rowNodes = [...worksheet.getElementsByTagName("row")];
+  const headerCells = getCellsByColumn(rowNodes[0], sharedStrings, styleFormats);
+  const columns = getColumnMap(headerCells);
 
-  if (!sheet) {
-    throw new Error(`No se encontró la hoja "${SHEET_NAME}".`);
+  return rowNodes.slice(1).reduce((rows, rowNode) => {
+    const cells = getCellsByColumn(rowNode, sharedStrings, styleFormats);
+    const number = formatIndex(cells[columns["N°"]]?.display);
+    const date = cells[columns.FECHA]?.display || "";
+    const balance = Number(cells[columns.SALDO]?.raw || 0);
+    const photoText = cells[columns.FOTO]?.display || "";
+    const status = String(cells[columns.ESTADO]?.display || "").trim();
+
+    if (!isValidNumber(number)) return rows;
+    if (!hasDisplayData({ number, date, balance, photoText, status })) return rows;
+
+    rows.push({
+      id: `${number}-${rowNode.getAttribute("r")}`,
+      number,
+      date,
+      balance,
+      photoText: photoText || "Ver",
+      photoUrl: hyperlinks[`${columns.FOTO}${rowNode.getAttribute("r")}`] || "",
+      status
+    });
+
+    return rows;
+  }, []);
+}
+
+function getColumnMap(cells) {
+  const columns = {};
+
+  for (const [column, cell] of Object.entries(cells)) {
+    const label = String(cell.display || "").trim();
+    if (REQUIRED_COLUMNS.includes(label)) {
+      columns[label] = column;
+    }
   }
 
-  const relationId = sheet.getAttribute("r:id");
-  const target = workbookRels[relationId];
-
-  if (!target) {
-    throw new Error(`No se pudo ubicar la hoja "${SHEET_NAME}".`);
+  const missingColumns = REQUIRED_COLUMNS.filter((column) => !columns[column]);
+  if (missingColumns.length) {
+    throw new Error(`Faltan columnas en el Sheet: ${missingColumns.join(", ")}.`);
   }
 
-  return resolvePath("xl/workbook.xml", target);
+  return columns;
+}
+
+function getCellsByColumn(rowNode, sharedStrings, styleFormats) {
+  if (!rowNode) return {};
+
+  return [...rowNode.getElementsByTagName("c")].reduce((cells, cell) => {
+    const ref = cell.getAttribute("r") || "";
+    cells[getColumnName(ref)] = readCellValue(cell, sharedStrings, styleFormats);
+    return cells;
+  }, {});
+}
+
+function readCellValue(cell, sharedStrings, styleFormats) {
+  const type = cell.getAttribute("t");
+  const raw = cell.getElementsByTagName("v")[0]?.textContent || "";
+
+  if (type === "inlineStr") {
+    const display = [...cell.getElementsByTagName("t")].map((node) => node.textContent || "").join("");
+    return { display, raw: display };
+  }
+
+  if (type === "s") {
+    const display = sharedStrings[Number(raw)] || "";
+    return { display, raw: display };
+  }
+
+  const formatCode = styleFormats[Number(cell.getAttribute("s") || 0)] || "";
+  return {
+    display: formatByCellStyle(raw, formatCode),
+    raw
+  };
+}
+
+function formatByCellStyle(value, formatCode) {
+  if (!value) return "";
+
+  const normalizedFormat = String(formatCode || "").toLowerCase();
+  if (normalizedFormat.includes("d") && normalizedFormat.includes("m") && normalizedFormat.includes("y")) {
+    return formatExcelDate(value, normalizedFormat);
+  }
+
+  return String(value).trim();
+}
+
+function formatExcelDate(value, formatCode) {
+  const serialDate = Number(value);
+  if (!serialDate) return String(value || "");
+
+  const date = new Date((serialDate - 25569) * MS_PER_DAY);
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(date.getUTCFullYear());
+
+  if (formatCode.indexOf("m") < formatCode.indexOf("d")) {
+    return `${month}/${day}/${year}`;
+  }
+
+  return `${day}/${month}/${year}`;
 }
 
 function readSharedStrings(files) {
@@ -50,6 +138,34 @@ function readSharedStrings(files) {
   return [...xml.getElementsByTagName("si")].map((item) =>
     [...item.getElementsByTagName("t")].map((textNode) => textNode.textContent || "").join("")
   );
+}
+
+function readStyleFormats(files) {
+  if (!files["xl/styles.xml"]) return [];
+
+  const xml = parseXml(readZipText(files, "xl/styles.xml"));
+  const customFormats = {};
+
+  for (const format of xml.getElementsByTagName("numFmt")) {
+    customFormats[format.getAttribute("numFmtId")] = format.getAttribute("formatCode") || "";
+  }
+
+  return [...xml.getElementsByTagName("cellXfs")[0]?.getElementsByTagName("xf") || []].map((style) => {
+    const formatId = style.getAttribute("numFmtId");
+    return customFormats[formatId] || getBuiltinFormat(formatId);
+  });
+}
+
+function getBuiltinFormat(formatId) {
+  const builtinFormats = {
+    14: "m/d/yyyy",
+    15: "d-mmm-yy",
+    16: "d-mmm",
+    17: "mmm-yy",
+    22: "m/d/yyyy h:mm"
+  };
+
+  return builtinFormats[formatId] || "";
 }
 
 function readHyperlinks(files, sheetPath, worksheet) {
@@ -68,114 +184,42 @@ function readHyperlinks(files, sheetPath, worksheet) {
   return links;
 }
 
-function getRows(worksheet, sharedStrings, hyperlinks) {
-  const rowNodes = [...worksheet.getElementsByTagName("row")];
-  const headerCells = getCellsByColumn(rowNodes[0], sharedStrings);
-  const columns = getColumnMap(headerCells);
+function isValidNumber(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return false;
 
-  return rowNodes.slice(1).reduce((rows, rowNode) => {
-    const cells = getCellsByColumn(rowNode, sharedStrings);
-    const number = formatIndex(getCellValue(cells, columns["N°"]));
-    const date = formatExcelDate(getCellValue(cells, columns.FECHA));
-    const balance = parseBalance(getCellValue(cells, columns.SALDO));
-    const photoText = getCellValue(cells, columns.FOTO);
-    const status = getCellValue(cells, columns.ESTADO).trim();
-
-    if (!hasDisplayData({ number, date, balance, photoText, status })) return rows;
-    if (!number) return rows;
-
-    rows.push({
-      id: `${number}-${rowNode.getAttribute("r")}`,
-      number,
-      date,
-      balance,
-      photoText: photoText || "Ver",
-      photoUrl: hyperlinks[`${columns.FOTO}${rowNode.getAttribute("r")}`] || "",
-      status
-    });
-
-    return rows;
-  }, []);
+  const number = Number(rawValue);
+  return !Number.isFinite(number) || number > 0;
 }
 
 function hasDisplayData(row) {
   return Boolean(row.number || row.date || row.balance || row.photoText || row.status);
 }
 
-function getColumnMap(cells) {
-  const columns = {};
-
-  for (const [column, value] of Object.entries(cells)) {
-    const label = String(value || "").trim();
-    if (REQUIRED_COLUMNS.includes(label)) {
-      columns[label] = column;
-    }
-  }
-
-  const missingColumns = REQUIRED_COLUMNS.filter((column) => !columns[column]);
-  if (missingColumns.length) {
-    throw new Error(`Faltan columnas en el Sheet: ${missingColumns.join(", ")}.`);
-  }
-
-  return columns;
-}
-
-function getCellsByColumn(rowNode, sharedStrings) {
-  if (!rowNode) return {};
-
-  return [...rowNode.getElementsByTagName("c")].reduce((cells, cell) => {
-    const ref = cell.getAttribute("r") || "";
-    cells[getColumnName(ref)] = readCellValue(cell, sharedStrings);
-    return cells;
-  }, {});
-}
-
-function readCellValue(cell, sharedStrings) {
-  const type = cell.getAttribute("t");
-
-  if (type === "inlineStr") {
-    return [...cell.getElementsByTagName("t")].map((node) => node.textContent || "").join("");
-  }
-
-  const value = cell.getElementsByTagName("v")[0]?.textContent || "";
-
-  if (type === "s") {
-    return sharedStrings[Number(value)] || "";
-  }
-
-  return value;
-}
-
-function getCellValue(cells, column) {
-  return String(cells[column] ?? "").trim();
-}
-
-function parseBalance(value) {
-  const normalized = String(value || "")
-    .replace(/[^\d,.-]/g, "")
-    .replace(",", ".");
-
-  return Number(normalized) || 0;
-}
-
 function formatIndex(value) {
   const rawValue = String(value || "").trim();
   if (!rawValue) return "";
 
-  const number = Number(value);
+  const number = Number(rawValue);
   return Number.isInteger(number) ? String(number) : rawValue;
 }
 
-function formatExcelDate(value) {
-  const serialDate = Number(value);
-  if (!serialDate) return String(value || "");
+function getSheetPath(workbook, workbookRels) {
+  const sheets = [...workbook.getElementsByTagName("sheet")];
+  const sheet = sheets.find((item) => item.getAttribute("name") === SHEET_NAME);
 
-  const date = new Date((serialDate - 25569) * MS_PER_DAY);
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const year = date.getUTCFullYear();
+  if (!sheet) {
+    throw new Error(`No se encontró la hoja "${SHEET_NAME}".`);
+  }
 
-  return `${day}/${month}/${year}`;
+  const relationId = sheet.getAttribute("r:id");
+  const target = workbookRels[relationId];
+
+  if (!target) {
+    throw new Error(`No se pudo ubicar la hoja "${SHEET_NAME}".`);
+  }
+
+  return resolvePath("xl/workbook.xml", target);
 }
 
 function parseXml(xmlText) {
