@@ -170,12 +170,12 @@ function formatExcelDate(value) {
   const serialDate = Number(value);
   if (!serialDate) return String(value || "");
 
-  return new Date((serialDate - 25569) * MS_PER_DAY).toLocaleDateString("es-PE", {
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "UTC",
-    year: "numeric"
-  });
+  const date = new Date((serialDate - 25569) * MS_PER_DAY);
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const year = date.getUTCFullYear();
+
+  return `${day}/${month}/${year}`;
 }
 
 function parseXml(xmlText) {
