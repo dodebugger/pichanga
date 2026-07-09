@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 
-const SPREADSHEET_ID = "1asqY2ooiesj3BbC5xlFNY-xPTOSf8JwE";
+const SPREADSHEET_ID = "1_DYE89VPg3nWba3m1AhQ8YKunsS3VN2An_DDlXxPk6g";
 const SHEET_NAME = "Resumen";
 const XLSX_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=xlsx`;
 const REQUIRED_COLUMNS = ["N°", "FECHA", "SALDO", "FOTO", "ESTADO"];
